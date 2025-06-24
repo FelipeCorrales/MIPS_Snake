@@ -45,7 +45,7 @@ MAIN:
 
     li $v0, 10
     syscall
-    
+
 DRAW_BACKGROUND:
     la $t0, bg0
 	lw $t0, 0($t0) # Load background color 1
@@ -68,6 +68,7 @@ DRAW_BACKGROUND:
 
         sll $t7, $t3, 2
 
+        # From the top
         add $t9, $t9, $t7
         sw $t2, 0($t9)
 		addi $t9, $t9, 256
@@ -75,6 +76,7 @@ DRAW_BACKGROUND:
 		subi $t9, $t9, 256
         sub $t9, $t9, $t7
 
+        # From below
         add $t9, $t9, $t5
         sub $t9, $t9, $t7
         sw $t2, 0($t9)
@@ -84,6 +86,7 @@ DRAW_BACKGROUND:
         add $t9, $t9, $t7
         sub $t9, $t9, $t5
 
+        # Add to counters
         addi $t3, $t3, 1
         addi $t6, $t6, 1
 
@@ -105,11 +108,13 @@ DRAW_BACKGROUND:
 			j ITERATOR_DRAW_BACKGROUND
 
 	ITERATOR_BACKGROUND_NEXT_ROW:
-	li $t6, 958
+	li $t6, 958 # End of the 15th row (64*15-2)
+
 	beq $t3, $t6, FINISHED_BACKGROUND
-	addi $t3, $t3, 128
-	subi $t3, $t3, 60
-	addi $t4, $t4, 128
+	addi $t3, $t3, 128 # Go to next row
+	subi $t3, $t3, 60 # Go back to first pixel of the row
+	addi $t4, $t4, 128 # Go to next row
+
 	li $t6, 2 # Alternate color
 	j BACKGROUND_ALTERNATE_COLOR
 
@@ -131,58 +136,114 @@ DRAW_BORDER:
     sll $t5, $t4, 2
     subi $t5, $t5, 4 # $t5 is used to find the end of the window
 
-    li $t4, 128 # Condition for the iterator
+    li $t4, 64 # Condition for the iterator
 
     li $t6, 0 # Iterator used to change between color 1 and 2
 
-    ITERATOR_DRAW_BORDER:
-        beq $t3, $t4, FINISHED_BORDER
+    ITERATOR_DRAW_BORDER_HORIZONTAL:
+        beq $t3, $t4, FINISHED_BORDER_HORIZONTAL
 
         sll $t7, $t3, 2
+
+        # Top part
         add $t9, $t9, $t7
         sw $t2, 0($t9)
+		addi $t9, $t9, 256
+        sw $t2, 0($t9)
+		subi $t9, $t9, 256
         sub $t9, $t9, $t7
 
+        # Bottom part
         add $t9, $t9, $t5
         sub $t9, $t9, $t7
         sw $t2, 0($t9)
+		subi $t9, $t9, 256
+        sw $t2, 0($t9)
+		addi $t9, $t9, 256
         add $t9, $t9, $t7
         sub $t9, $t9, $t5
 
-        sll $t7, $t3, 8
-        add $t9, $t9, $t7
-        # sw $t2, 0($t9) # Creates an out of scope pixel, unused for now
-        addi $t9, $t9, 4
-        sw $t2, 0($t9)
-        subi $t9, $t9, 4
-        sub $t9, $t9, $t7
-
-        add $t9, $t9, $t5
-        sub $t9, $t9, $t7
-        sw $t2, 0($t9)
-        subi $t9, $t9, 4
-        sw $t2, 0($t9)
-        addi $t9, $t9, 4
-        add $t9, $t9, $t7
-        sub $t9, $t9, $t5
-
+        # Add to counters
         addi $t3, $t3, 1
         addi $t6, $t6, 1
         li $t7, 2
 
-        beq $t6, $t7, CHANGE_BORDER_COLOR
-        j ITERATOR_DRAW_BORDER
+        beq $t6, $t7, CHANGE_BORDER_COLOR_HORIZONTAL
+        j ITERATOR_DRAW_BORDER_HORIZONTAL
 
-        CHANGE_BORDER_COLOR:
-        beq $t2, $t0, CHANGE_BORDER_COLOR_2
+        CHANGE_BORDER_COLOR_HORIZONTAL:
+        beq $t2, $t0, CHANGE_BORDER_COLOR_HORIZONTAL_2
         move $t2, $t0 # Changes color to color 1
         li $t6, 0
-        j ITERATOR_DRAW_BORDER
+        j ITERATOR_DRAW_BORDER_HORIZONTAL
 
-        CHANGE_BORDER_COLOR_2:
+        CHANGE_BORDER_COLOR_HORIZONTAL_2:
         move $t2, $t1 # Changes color to color 2
         li $t6, 0
-        j ITERATOR_DRAW_BORDER
+        j ITERATOR_DRAW_BORDER_HORIZONTAL
 
-    FINISHED_BORDER:
+    FINISHED_BORDER_HORIZONTAL:
+    j DRAW_BORDER_VERTICAL
+
+DRAW_BORDER_VERTICAL:
+    la $t0, br0
+    lw $t0, 0($t0) # Load border color 1
+
+    la $t1, br1
+    lw $t1, 0($t1) # Load border color 2
+
+    move $t2, $t1 # $t2 is a buffer for the color that is going to be used
+
+    li $t3, 0 # Iterator
+    li $t4, 2048
+    sll $t5, $t4, 2
+    subi $t5, $t5, 4 # $t5 is used to find the end of the window
+
+    li $t4, 28 # Number of columns * 2 used as condition for the iterator
+
+    li $t6, 0 # Iterator used to change between color 1 and 2
+
+    ITERATOR_DRAW_BORDER_VERTICAL:
+        beq $t3, $t4, FINISHED_BORDER_VERTICAL
+
+        sll $t7, $t3, 8
+
+        # Left side
+        add $t9, $t9, $t7
+        sw $t2, 512($t9)
+		addi $t9, $t9, 4
+        sw $t2, 512($t9)
+		subi $t9, $t9, 4
+        sub $t9, $t9, $t7
+
+        # Right side
+        add $t9, $t9, $t5
+        sub $t9, $t9, $t7
+        sw $t2, -512($t9)
+		subi $t9, $t9, 4
+        sw $t2, -512($t9)
+		addi $t9, $t9, 4
+        add $t9, $t9, $t7
+        sub $t9, $t9, $t5
+
+        # Add to counters
+        addi $t3, $t3, 1
+        addi $t6, $t6, 1
+        li $t7, 2
+
+        beq $t6, $t7, CHANGE_BORDER_COLOR_VERTICAL
+        j ITERATOR_DRAW_BORDER_VERTICAL
+
+        CHANGE_BORDER_COLOR_VERTICAL:
+        beq $t2, $t0, CHANGE_BORDER_COLOR_VERTICAL_2
+        move $t2, $t0 # Changes color to color 1
+        li $t6, 0
+        j ITERATOR_DRAW_BORDER_VERTICAL
+
+        CHANGE_BORDER_COLOR_VERTICAL_2:
+        move $t2, $t1 # Changes color to color 2
+        li $t6, 0
+        j ITERATOR_DRAW_BORDER_VERTICAL
+
+    FINISHED_BORDER_VERTICAL:
     jr $ra
