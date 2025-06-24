@@ -41,9 +41,81 @@ MAIN:
     lw $s0, 0($t4)
     
     jal DRAW_BORDER
+    jal DRAW_BACKGROUND
 
     li $v0, 10
     syscall
+    
+DRAW_BACKGROUND:
+    la $t0, bg0
+	lw $t0, 0($t0) # Load background color 1
+
+	la $t1, bg1
+	lw $t1, 0($t1) # Load background color 2
+
+	move $t2, $t0 # $t2 is going to be used as a buffer to the color to be used
+
+	li $t3, 130 # Iterator starting at first background tile
+	li $t4, 2047 # Last element of the window
+	sll $t5, $t4, 2
+
+	li $t4, 190 # Last element of the first row of the background (Condition for iterator)
+
+	li $t6, 0 # Iterator used for the change of color
+
+	ITERATOR_DRAW_BACKGROUND:
+		beq $t3, $t4, ITERATOR_BACKGROUND_NEXT_ROW
+
+        sll $t7, $t3, 2
+
+        add $t9, $t9, $t7
+        sw $t2, 0($t9)
+		addi $t9, $t9, 256
+        sw $t2, 0($t9)
+		subi $t9, $t9, 256
+        sub $t9, $t9, $t7
+
+        add $t9, $t9, $t5
+        sub $t9, $t9, $t7
+        sw $t2, 0($t9)
+		subi $t9, $t9, 256
+        sw $t2, 0($t9)
+		addi $t9, $t9, 256
+        add $t9, $t9, $t7
+        sub $t9, $t9, $t5
+
+        addi $t3, $t3, 1
+        addi $t6, $t6, 1
+
+		BACKGROUND_ALTERNATE_COLOR:
+			li $t7, 2
+
+			beq $t6, $t7, CHANGE_BACKGROUND_COLOR
+			j ITERATOR_DRAW_BACKGROUND
+
+			CHANGE_BACKGROUND_COLOR:
+			beq $t2, $t0, CHANGE_BACKGROUND_COLOR_2
+			move $t2, $t0 # Changes color to color 1
+			li $t6, 0
+			j ITERATOR_DRAW_BACKGROUND
+
+			CHANGE_BACKGROUND_COLOR_2:
+			move $t2, $t1 # Changes color to color 2
+			li $t6, 0
+			j ITERATOR_DRAW_BACKGROUND
+
+	ITERATOR_BACKGROUND_NEXT_ROW:
+	li $t6, 958
+	beq $t3, $t6, FINISHED_BACKGROUND
+	addi $t3, $t3, 128
+	subi $t3, $t3, 60
+	addi $t4, $t4, 128
+	li $t6, 2 # Alternate color
+	j BACKGROUND_ALTERNATE_COLOR
+
+	FINISHED_BACKGROUND:
+	jr $ra
+	
 
 DRAW_BORDER:
     la $t0, br0
