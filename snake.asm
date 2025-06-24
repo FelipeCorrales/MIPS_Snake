@@ -10,7 +10,6 @@
     ###                                        ###
     ##############################################
 
-
 .data
     # Screen height = 32px
     # Screen width = 64px
@@ -32,19 +31,85 @@
     sn1: .word 0x42BFE8 # Snake color 2
     apl: .word 0xF1641F # Apple color
 
+    mainsplash0: .word 0x00000000 0x007E607E 0x667E7E60 0x7E667E60 0x7E667860 0x607E6678 0x607E667E 0x66787E66 0x7E667806 0x66666660 0x06666666 0x607E6666 0x667E7E66 0x66667E00 0x00000000 0x00000000 0x00000000 0x00000CB6 0xCDA6D00D 0x348994D0 0x09224534 0x800916CD 0x36500000 0x00000002 0x66914A80 0x0364CA6A 0x8002629A 0x40000366 0xDA6A8000 0x00000000
+    mainsplash1: .word 0xFFF0FFFF 0xFF819081 0x9981819F 0x8199819F 0x8199879F 0x9F819987 0x9C819981 0x99848199 0x819984F9 0x9999999C 0xF9999999 0x9F819999 0x99818199 0x999981FF 0xFFFFFFFF 0x00000000 0x001FFFFF 0xFFF81349 0x32592812 0xCB766B28 0x16DDBACB 0x7816E932 0xC9A81FFF 0xFFFFF805 0x996EB540 0x049B3595 0x40059D65 0xBFC00499 0x25954007 0xFFFFFFC0
+
 .text
     # These registers are reserved to use as references to the window and game field
     la $t9, window
     la $t8, field
 MAIN:
-    la $t4, apl
-    lw $s0, 0($t4)
-    
     jal DRAW_BORDER
     jal DRAW_BACKGROUND
 
+    la $a0, mainsplash0
+    la $a1, t0
+    jal SHOW_SPLASH
+
+    la $a0, mainsplash1
+    la $a1, t1
+    jal SHOW_SPLASH
+
     li $v0, 10
     syscall
+
+SHOW_SPLASH: # Shows splash stored in $a0 with color stored in $a1
+    li $t0, 0
+    li $t1, 30 # Splashes are 30 words long
+
+    lw $a1, 0($a1) # Loads color
+
+    SPLASH_WORD_ITERATOR:
+    beq $t0, $t1, EXIT
+
+    sll $t3, $t0, 2
+    add $a0, $a0, $t3
+    lw $t2, 0($a0)
+    sub $a0, $a0, $t3
+    
+    # Iterators for bitwise operations
+    li $t3, 0
+    li $t4, 32
+
+    SPLASH_BIT_ITERATOR:
+        beq $t3, $t4, SPLASH_NEXT_WORD
+        andi $t5, $t2, 0x80000000
+        sll $t2, $t2, 1
+        srl $t5, $t5, 31
+
+        beq $t5, $zero, SPLASH_NEXT_BIT
+
+        # Go to correct direction
+        sll $t5, $t0, 5
+        add $t5, $t5, $t3
+
+        li $t6, 40
+
+        li $t7, 0
+
+        SPLASH_ROW_ITERATOR:
+            blt $t5, $t6, SPLASH_PRINT_PIXEL
+            subi $t5, $t5, 40
+            addi $t7, $t7, 256
+            j SPLASH_ROW_ITERATOR
+
+        SPLASH_PRINT_PIXEL:
+        sll $t5, $t5, 2
+        add $t6, $t5, $t7
+        add $t5, $t6, $t9
+        sw $a1, 1072($t5) # Offset is 4 rows (4*4*64) + 12 Spaces (4*12
+
+        SPLASH_NEXT_BIT:
+        addi $t3, $t3, 1
+        j SPLASH_BIT_ITERATOR
+
+    SPLASH_NEXT_WORD:
+    addi $t0, $t0, 1
+    j SPLASH_WORD_ITERATOR
+
+    EXIT:
+    jr $ra
+    
 
 DRAW_BACKGROUND:
     la $t0, bg0
