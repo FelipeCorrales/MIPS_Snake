@@ -1,7 +1,7 @@
 # Snake in MIPS
 This was made as a project for college
 
-[!screenshot.png]
+![screenshot.png]
 
 # How to run
 This must program be ran through MARS, in order to see the display enable the `Bitmap Display`, you can find it in Tools->Bitmap Display.
