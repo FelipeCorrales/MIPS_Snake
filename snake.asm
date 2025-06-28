@@ -47,9 +47,196 @@
     la $t9, window
     la $t8, field
 MAIN:
+    # jal INITIAL_DRAW
+
+    li $s0, 0
+    START_LOOP:
+    bgt $s0, $zero, START_GAME
+    jal GET_INPUT
+    jal STALL       # This stall avoids lag
+    j START_LOOP
+
+    START_GAME:
+    # jal DRAW_BACKGROUND
+
+    GAME_LOOP:
+        jal GET_INPUT
+
+        jal MOVE_PLAYER
+        jal CHECK_BOUNDARIES
+        # jal CHECK_COLLISION
+
+        # jal CHECK_APPLE
+        # jal GENERATE_APPLE
+        # jal MOVE_TAIL
+
+        # jal UPDATE_BOARD
+
+        jal DRAW_BOARD
+
+        jal STALL
+        j GAME_LOOP_CONDITIONAL
+
+    GAME_OVER:
+        # jal DRAW_GAME_OVER
+        li $t0, 0
+        li $t1, 30
+        STALL_GAME_OVER:
+        beq $t0, $t1, RESTART
+        jal STALL
+        addi $t0, $t0, 1
+        j STALL_GAME_OVER
+
+    RESTART:
+        li $s0, 0
+        li $t0, 0x03702731
+        sw $t0, player
+        # jal DRAW_BACKGROUND
+        # jal DRAW_TITLE_SCREEN
+        j START_LOOP
+
+GAME_LOOP_CONDITIONAL:
+    lw $t1, player
+    andi $t0, $t1, 0x00000001
+    beq $t0, $zero, GAME_OVER
+    j GAME_LOOP
+
+MOVE_PLAYER:
+    lw $t3, player              # Load player
+    andi $t0, $t3, 0x000000F0   # Save direction
+    srl $t0, $t0, 4             # Apply correct format
+    andi $t1, $t3, 0xFF000000   # Save X position
+    srl $t1, $t1, 24            # Apply correct format
+    andi $t2, $t3, 0x00F00000   # Save Y position
+    srl $t2, $t2, 20            # Apply correct format
+    andi $t3, $t3, 0x000FFFFF   # Save player without X and Y values
+
+    li $t4, 1
+    li $t5, 2
+
+    beq $t0, $zero, MOVE_UP
+    beq $t0, $t4, MOVE_LEFT
+    beq $t0, $t5, MOVE_DOWN
+    bgt $t0, $t5, MOVE_RIGHT
+    j MOVE_SAVE_PLAYER
+
+    MOVE_UP:
+    subi $t2, $t2, 1
+    j MOVE_SAVE_PLAYER
+
+    MOVE_LEFT:
+    subi $t1, $t1, 1
+    j MOVE_SAVE_PLAYER
+
+    MOVE_DOWN:
+    addi $t2, $t2, 1
+    j MOVE_SAVE_PLAYER
+
+    MOVE_RIGHT:
+    addi $t1, $t1, 1
+    j MOVE_SAVE_PLAYER
+
+    MOVE_SAVE_PLAYER:
+    sll $t1, $t1, 24    # Apply correct format
+    sll $t2, $t2, 20    # Apply correct format
+    add $t3, $t3, $t1   # Add to buffer
+    add $t3, $t3, $t2   # Add to buffer
+    sw $t3, player      # Save buffer to memory
+
+    jr $ra
+
+CHECK_BOUNDARIES:
+    lw $t0, player
+    andi $t1, $t0, 0xFF000000   # Save X position
+    srl $t1, $t1, 24            # Apply correct format
+    andi $t2, $t0, 0x00F00000   # Save Y position
+    srl $t2, $t2, 20            # Apply correct format
+
+    li $t3, 10
+    li $t4, 14
+
+    bge $t1, $t3, KILL_PLAYER
+    blt $t1, $zero, KILL_PLAYER
+
+    bge $t2, $t4, KILL_PLAYER
+    blt $t2, $zero, KILL_PLAYER
+
+    jr $ra
+
+KILL_PLAYER:
+    lw $t0, player
+    andi $t0, $t0, 0xFFFFFFF0
+    sw $t0, player
+    jr $ra
+
+STALL:
+    # Sleep for 50ms
+    li $v0, 32
+    li $a0, 50
+    jr $ra
+
+GET_INPUT:
+    lw $t0, 0xFFFF0004
+    li $t1, 32  # Space
+    li $t2, 44  # Comma
+    li $t3, 97  # A
+    li $t4, 111 # 0
+    li $t5, 101 # E
+    li $t6, 27  # Escape
+
+    lw $t7, player # Load player
+    andi $t7, $t7, 0xFFFFFF0F
+
+    beq $t0, $t1, START_PRESSED
+    beq $t0, $t2, UP_PRESSED
+    beq $t0, $t3, LEFT_PRESSED
+    beq $t0, $t4, DOWN_PRESSED
+    beq $t0, $t5, RIGHT_PRESSED
+    beq $t0, $t6, ESCAPE_PRESSED
+
+    j FINISH
+
+    START_PRESSED:
+    li $s0, 1
+    j FINISH
+
+    UP_PRESSED:
+    sw $t7, player
+    j FINISH
+
+    LEFT_PRESSED:
+    addi $t7, $t7, 0x00000010
+    sw $t7, player
+    j FINISH
+
+    DOWN_PRESSED:
+    addi $t7, $t7, 0x00000020
+    sw $t7, player
+    j FINISH
+
+    RIGHT_PRESSED:
+    addi $t7, $t7, 0x00000030
+    sw $t7, player
+    j FINISH
+
+    ESCAPE_PRESSED:
+    li $v0, 10
+    syscall
+    j FINISH
+
+    FINISH:
+    sw $zero, 0xFFFF0004
+    jr $ra
+
+INITIAL_DRAW:
+    move $s0, $ra
     jal DRAW_BORDER
     jal DRAW_BACKGROUND
+    jal DRAW_TITLE_SCREEN
+    jr $s0
 
+DRAW_TITLE_SCREEN:
+    move $s1, $ra
     la $a0, mainsplash0
     la $a1, t0
     jal SHOW_SPLASH
@@ -57,9 +244,7 @@ MAIN:
     la $a0, mainsplash1
     la $a1, t1
     jal SHOW_SPLASH
-
-    li $v0, 10
-    syscall
+    jr $s1
 
 SHOW_SPLASH:        # Shows splash stored in $a0 with color stored in $a1
     li $t0, 0
@@ -319,4 +504,7 @@ DRAW_BORDER_VERTICAL:
         j ITERATOR_DRAW_BORDER_VERTICAL
 
     FINISHED_BORDER_VERTICAL:
+    jr $ra
+
+DRAW_BOARD:
     jr $ra
