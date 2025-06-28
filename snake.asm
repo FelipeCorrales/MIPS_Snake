@@ -11,18 +11,26 @@
     ##############################################
 
 .data
-    # Screen height = 32px
-    # Screen width = 64px
+    # Screen height =   32px
+    # Screen width =    64px
     # Size of screen: height*width*4 = 8192
     window: .space 8192
-    # Game field height = 14px
-    # Game field width = 30px
+    # Game field height =   14px
+    # Game field width =    30px
     # Game field size: height*width*4 = 1680
     field: .space 1680
 
+    # Byte 1 & 2:   Player X position
+    # Byte 3:       Player Y position
+    # Byte 4 & 5:   Tail X position
+    # Byte 6:       Tail Y position
+    # Byte 7:       Player moving direction
+    # Byte 8:       Is player alive
+    player: .word 0x03702731
+
     # Colors
-    t0: .word 0xFFFFFF # White
-    t1: .word 0x000000 # Black
+    t0: .word 0xFFFFFF  # White
+    t1: .word 0x000000  # Black
     bg0: .word 0x325D37 # Background color 1
     bg1: .word 0x477238 # Background color 2
     br0: .word 0xC45F75 # Border color 1
@@ -53,11 +61,11 @@ MAIN:
     li $v0, 10
     syscall
 
-SHOW_SPLASH: # Shows splash stored in $a0 with color stored in $a1
+SHOW_SPLASH:        # Shows splash stored in $a0 with color stored in $a1
     li $t0, 0
-    li $t1, 30 # Splashes are 30 words long
+    li $t1, 30      # Splashes are 30 words long
 
-    lw $a1, 0($a1) # Loads color
+    lw $a1, 0($a1)  # Loads color
 
     SPLASH_WORD_ITERATOR:
     beq $t0, $t1, EXIT
@@ -97,7 +105,7 @@ SHOW_SPLASH: # Shows splash stored in $a0 with color stored in $a1
         sll $t5, $t5, 2
         add $t6, $t5, $t7
         add $t5, $t6, $t9
-        sw $a1, 1072($t5) # Offset is 4 rows (4*4*64) + 12 Spaces (4*12
+        sw $a1, 1072($t5)   # Offset is 4 rows (4*4*64) + 12 Spaces (4*12
 
         SPLASH_NEXT_BIT:
         addi $t3, $t3, 1
@@ -113,20 +121,20 @@ SHOW_SPLASH: # Shows splash stored in $a0 with color stored in $a1
 
 DRAW_BACKGROUND:
     la $t0, bg0
-	lw $t0, 0($t0) # Load background color 1
+	lw $t0, 0($t0)  # Load background color 1
 
 	la $t1, bg1
-	lw $t1, 0($t1) # Load background color 2
+	lw $t1, 0($t1)  # Load background color 2
 
-	move $t2, $t0 # $t2 is going to be used as a buffer to the color to be used
+	move $t2, $t0   # $t2 is going to be used as a buffer to the color to be used
 
-	li $t3, 130 # Iterator starting at first background tile
-	li $t4, 2047 # Last element of the window
+	li $t3, 130     # Iterator starting at first background tile
+	li $t4, 2047    # Last element of the window
 	sll $t5, $t4, 2
 
-	li $t4, 190 # Last element of the first row of the background (Condition for iterator)
+	li $t4, 190     # Last element of the first row of the background (Condition for iterator)
 
-	li $t6, 0 # Iterator used for the change of color
+	li $t6, 0       # Iterator used for the change of color
 
 	ITERATOR_DRAW_BACKGROUND:
 		beq $t3, $t4, ITERATOR_BACKGROUND_NEXT_ROW
@@ -163,24 +171,24 @@ DRAW_BACKGROUND:
 
 			CHANGE_BACKGROUND_COLOR:
 			beq $t2, $t0, CHANGE_BACKGROUND_COLOR_2
-			move $t2, $t0 # Changes color to color 1
+			move $t2, $t0   # Changes color to color 1
 			li $t6, 0
 			j ITERATOR_DRAW_BACKGROUND
 
 			CHANGE_BACKGROUND_COLOR_2:
-			move $t2, $t1 # Changes color to color 2
+			move $t2, $t1   # Changes color to color 2
 			li $t6, 0
 			j ITERATOR_DRAW_BACKGROUND
 
 	ITERATOR_BACKGROUND_NEXT_ROW:
-	li $t6, 958 # End of the 15th row (64*15-2)
+	li $t6, 958             # End of the 15th row (64*15-2)
 
 	beq $t3, $t6, FINISHED_BACKGROUND
-	addi $t3, $t3, 128 # Go to next row
-	subi $t3, $t3, 60 # Go back to first pixel of the row
-	addi $t4, $t4, 128 # Go to next row
+	addi $t3, $t3, 128      # Go to next row
+	subi $t3, $t3, 60       # Go back to first pixel of the row
+	addi $t4, $t4, 128      # Go to next row
 
-	li $t6, 2 # Alternate color
+	li $t6, 2               # Alternate color
 	j BACKGROUND_ALTERNATE_COLOR
 
 	FINISHED_BACKGROUND:
@@ -189,21 +197,21 @@ DRAW_BACKGROUND:
 
 DRAW_BORDER:
     la $t0, br0
-    lw $t0, 0($t0) # Load border color 1
+    lw $t0, 0($t0)      # Load border color 1
 
     la $t1, br1
-    lw $t1, 0($t1) # Load border color 2
+    lw $t1, 0($t1)      # Load border color 2
 
-    move $t2, $t0 # $t2 is a buffer for the color that is going to be used
+    move $t2, $t0       # $t2 is a buffer for the color that is going to be used
 
-    li $t3, 0 # Iterator
+    li $t3, 0           # Iterator
     li $t4, 2048
     sll $t5, $t4, 2
-    subi $t5, $t5, 4 # $t5 is used to find the end of the window
+    subi $t5, $t5, 4    # $t5 is used to find the end of the window
 
-    li $t4, 64 # Condition for the iterator
+    li $t4, 64          # Condition for the iterator
 
-    li $t6, 0 # Iterator used to change between color 1 and 2
+    li $t6, 0           # Iterator used to change between color 1 and 2
 
     ITERATOR_DRAW_BORDER_HORIZONTAL:
         beq $t3, $t4, FINISHED_BORDER_HORIZONTAL
@@ -238,12 +246,12 @@ DRAW_BORDER:
 
         CHANGE_BORDER_COLOR_HORIZONTAL:
         beq $t2, $t0, CHANGE_BORDER_COLOR_HORIZONTAL_2
-        move $t2, $t0 # Changes color to color 1
+        move $t2, $t0   # Changes color to color 1
         li $t6, 0
         j ITERATOR_DRAW_BORDER_HORIZONTAL
 
         CHANGE_BORDER_COLOR_HORIZONTAL_2:
-        move $t2, $t1 # Changes color to color 2
+        move $t2, $t1   # Changes color to color 2
         li $t6, 0
         j ITERATOR_DRAW_BORDER_HORIZONTAL
 
@@ -252,21 +260,21 @@ DRAW_BORDER:
 
 DRAW_BORDER_VERTICAL:
     la $t0, br0
-    lw $t0, 0($t0) # Load border color 1
+    lw $t0, 0($t0)      # Load border color 1
 
     la $t1, br1
-    lw $t1, 0($t1) # Load border color 2
+    lw $t1, 0($t1)      # Load border color 2
 
-    move $t2, $t1 # $t2 is a buffer for the color that is going to be used
+    move $t2, $t1       # $t2 is a buffer for the color that is going to be used
 
-    li $t3, 0 # Iterator
+    li $t3, 0           # Iterator
     li $t4, 2048
     sll $t5, $t4, 2
-    subi $t5, $t5, 4 # $t5 is used to find the end of the window
+    subi $t5, $t5, 4    # $t5 is used to find the end of the window
 
-    li $t4, 28 # Number of columns * 2 used as condition for the iterator
+    li $t4, 28          # Number of columns * 2 used as condition for the iterator
 
-    li $t6, 0 # Iterator used to change between color 1 and 2
+    li $t6, 0           # Iterator used to change between color 1 and 2
 
     ITERATOR_DRAW_BORDER_VERTICAL:
         beq $t3, $t4, FINISHED_BORDER_VERTICAL
@@ -301,12 +309,12 @@ DRAW_BORDER_VERTICAL:
 
         CHANGE_BORDER_COLOR_VERTICAL:
         beq $t2, $t0, CHANGE_BORDER_COLOR_VERTICAL_2
-        move $t2, $t0 # Changes color to color 1
+        move $t2, $t0   # Changes color to color 1
         li $t6, 0
         j ITERATOR_DRAW_BORDER_VERTICAL
 
         CHANGE_BORDER_COLOR_VERTICAL_2:
-        move $t2, $t1 # Changes color to color 2
+        move $t2, $t1   # Changes color to color 2
         li $t6, 0
         j ITERATOR_DRAW_BORDER_VERTICAL
 
