@@ -18,6 +18,10 @@
     # Game field height =   14px
     # Game field width =    30px
     # Game field size: height*width*4 = 1680
+    # Bit 1:        Apple (0=False, 1=True)
+    # Bit 2:        Active/Occupied by snake body (0=False, 1=True)
+    # Bit 3 & 4:    Direction (Used to move the tail)
+    # Total = 210 WORDS
     field: .space 1680
 
     # Byte 1 & 2:   Player X position
@@ -41,6 +45,8 @@
 
     mainsplash0: .word 0x00000000 0x007E607E 0x667E7E60 0x7E667E60 0x7E667860 0x607E6678 0x607E667E 0x66787E66 0x7E667806 0x66666660 0x06666666 0x607E6666 0x667E7E66 0x66667E00 0x00000000 0x00000000 0x00000000 0x00000CB6 0xCDA6D00D 0x348994D0 0x09224534 0x800916CD 0x36500000 0x00000002 0x66914A80 0x0364CA6A 0x8002629A 0x40000366 0xDA6A8000 0x00000000
     mainsplash1: .word 0xFFF0FFFF 0xFF819081 0x9981819F 0x8199819F 0x8199879F 0x9F819987 0x9C819981 0x99848199 0x819984F9 0x9999999C 0xF9999999 0x9F819999 0x99818199 0x999981FF 0xFFFFFFFF 0x00000000 0x001FFFFF 0xFFF81349 0x32592812 0xCB766B28 0x16DDBACB 0x7816E932 0xC9A81FFF 0xFFFFF805 0x996EB540 0x049B3595 0x40059D65 0xBFC00499 0x25954007 0xFFFFFFC0
+    oversplash0: .word 0x00000000
+    oversplash1: .word 0xFFFFFFFF
 
 .text
     # These registers are reserved to use as references to the window and game field
@@ -60,19 +66,21 @@ MAIN:
     # jal DRAW_BACKGROUND
 
     GAME_LOOP:
+        li $s1, 0
         jal GET_INPUT
 
         jal MOVE_PLAYER
         jal CHECK_BOUNDARIES
         # jal CHECK_COLLISION
 
-        # jal CHECK_APPLE
-        # jal GENERATE_APPLE
+        # jal CHECK_APPLE (Apple eaten $s1)
+        bne $s1, $zero, NO_APPLE
+        # jal GENERATE_APPLE (Only if $s1 != 0, should also draw the apple)
+
+        NO_APPLE:
+        jal DRAW_BOARD_UPDATE
+
         # jal MOVE_TAIL
-
-        # jal UPDATE_BOARD
-
-        jal DRAW_BOARD
 
         jal STALL
         j GAME_LOOP_CONDITIONAL
@@ -110,6 +118,20 @@ MOVE_PLAYER:
     andi $t2, $t3, 0x00F00000   # Save Y position
     srl $t2, $t2, 20            # Apply correct format
     andi $t3, $t3, 0x000FFFFF   # Save player without X and Y values
+
+    # Update player field
+    li $t4, 30
+    mult $t4, $t1
+    mflo $t4
+    sll $t4, $t4, 2
+    sll $t5, $t2, 2
+    add $t5, $t5, $t8
+    lw $t6, 0($t5)
+    andi $t6, 0x0FFFFFFF
+    addi $t4, $t0, 4
+    sll $t4, $t4, 28
+    add $t4, $t4, $t6
+    sw $t4, 0($t5)
 
     li $t4, 1
     li $t5, 2
@@ -152,7 +174,7 @@ CHECK_BOUNDARIES:
     andi $t2, $t0, 0x00F00000   # Save Y position
     srl $t2, $t2, 20            # Apply correct format
 
-    li $t3, 10
+    li $t3, 30
     li $t4, 14
 
     bge $t1, $t3, KILL_PLAYER
@@ -305,11 +327,9 @@ SHOW_SPLASH:        # Shows splash stored in $a0 with color stored in $a1
     
 
 DRAW_BACKGROUND:
-    la $t0, bg0
-	lw $t0, 0($t0)  # Load background color 1
+	lw $t0, bg0     # Load background color 1
 
-	la $t1, bg1
-	lw $t1, 0($t1)  # Load background color 2
+	lw $t1, bg1     # Load background color 2
 
 	move $t2, $t0   # $t2 is going to be used as a buffer to the color to be used
 
@@ -381,11 +401,9 @@ DRAW_BACKGROUND:
 	
 
 DRAW_BORDER:
-    la $t0, br0
-    lw $t0, 0($t0)      # Load border color 1
+    lw $t0, br0         # Load border color 1
 
-    la $t1, br1
-    lw $t1, 0($t1)      # Load border color 2
+    lw $t1, br1         # Load border color 2
 
     move $t2, $t0       # $t2 is a buffer for the color that is going to be used
 
@@ -444,11 +462,8 @@ DRAW_BORDER:
     j DRAW_BORDER_VERTICAL
 
 DRAW_BORDER_VERTICAL:
-    la $t0, br0
-    lw $t0, 0($t0)      # Load border color 1
-
-    la $t1, br1
-    lw $t1, 0($t1)      # Load border color 2
+    lw $t0, br0         # Load border color 1
+    lw $t1, br1         # Load border color 2
 
     move $t2, $t1       # $t2 is a buffer for the color that is going to be used
 
@@ -506,5 +521,147 @@ DRAW_BORDER_VERTICAL:
     FINISHED_BORDER_VERTICAL:
     jr $ra
 
-DRAW_BOARD:
+DRAW_BOARD_UPDATE:
+    lw $t4, player              # Load player
+    andi $t0, $t4, 0x000000F0   # Save player direction
+    srl $t0, $t0, 4             # Apply correct format
+    andi $t1, $t4, 0xFF000000   # Save player X position
+    srl $t1, $t1, 24            # Apply correct format
+    andi $t2, $t4, 0x00F00000   # Save player Y position
+    srl $t2, $t2, 20            # Apply correct format
+    andi $t3, $t4, 0x000FF000   # Save tail X position
+    srl $t3, $t3, 12            # Apply correct format
+    andi $t4, $t4, 0x00000F00   # Save tail Y position
+    srl $t4, $t4, 8             # Apply correct format
+
+    # Get tail direction
+    li $t5, 30
+    mult $t5, $t4
+    mflo $t5
+    sll $t6, $t3, 2
+    sll $t5, $t5, 2
+    add $t5, $t5, $t6
+    add $t5, $t5, $t8
+    lw $t5, 0($t5)
+    andi $t5, 0x30000000
+    srl $t5, $t5, 28            # Apply correct format
+
+    CHOOSE_PLAYER_COLOR:
+        add $a0, $t1, $t2
+        andi $a0, $a0, 0x1
+        beq $a0, $zero, PLAYER_COLOR_1
+        PLAYER_COLOR_0:
+        lw $a0, sn0
+        j CHOOSE_BACKGROUND_COLOR
+        PLAYER_COLOR_1:
+        lw $a0, sn1
+
+    CHOOSE_BACKGROUND_COLOR:
+        add $a1, $t3, $t4
+        andi $a1, $a1, 0x1
+        beq $a1, $zero, BACKGROUND_COLOR_1
+        BACKGROUND_COLOR_0:
+        lw $a1, bg0
+        j GET_ADDRESSES
+        BACKGROUND_COLOR_1:
+        lw $a1, bg1
+
+    GET_ADDRESSES:
+    # Shift left Y values by 9
+    sll $t2, $t2, 9
+    sll $t4, $t4, 9
+    # Shift left X values by 2
+    sll $t1, $t1, 3
+    sll $t3, $t3, 3
+    
+    # Get address for player
+    add $t1, $t1, $t2
+    add $t1, $t1, $t9
+
+    # Get address for tail
+    add $t3, $t3, $t4
+    add $t3, $t3, $t9
+
+    # $t0 Direction player
+    # $t1 Offset player
+    # $t2 Direction tail
+    # $t3 Offset tail
+    move $t2, $t5
+
+    FIRST_PIXEL_PLAYER:
+        li $t4, 2
+        bge $t0, $t4, FIRST_PIXEL_PLAYER_ELSE
+        sw $a0, 260($t1)
+        j FIRST_PIXEL_TAIL
+        FIRST_PIXEL_PLAYER_ELSE:
+        sw $a0, 0($t1)
+
+    FIRST_PIXEL_TAIL:
+        bne $s1, $zero, SECOND_PIXEL_PLAYER
+        li $t4, 2
+        bge $t2, $t4, FIRST_PIXEL_TAIL_ELSE
+        sw $a1, 260($t3)
+        j SECOND_PIXEL_PLAYER
+        FIRST_PIXEL_TAIL_ELSE:
+        sw $a1, 0($t3)
+
+    SECOND_PIXEL_PLAYER:
+        li $t4, 3
+        blt $t0, $zero, SECOND_PIXEL_PLAYER_ELSE
+        beq $t0, $t4, SECOND_PIXEL_PLAYER_ELSE
+        sw $a0, 4($t1)
+        j THIRD_PIXEL_PLAYER
+        SECOND_PIXEL_PLAYER_ELSE:
+        sw $a0, 256($t1)
+
+    SECOND_PIXEL_TAIL:
+        bne $s1, $zero, MID_PRINT_STALL
+        li $t4, 3
+        blt $t2, $zero, SECOND_PIXEL_TAIL_ELSE
+        beq $t2, $t4, SECOND_PIXEL_TAIL_ELSE
+        sw $a1, 4($t3)
+        j THIRD_PIXEL_PLAYER
+        SECOND_PIXEL_TAIL_ELSE:
+        sw $a1, 256($t3)
+
+    MID_PRINT_STALL:
+        jal STALL
+
+    THIRD_PIXEL_PLAYER:
+        li $t4, 2
+        bge $t0, $t4, THIRD_PIXEL_PLAYER_ELSE
+        sw $a0, 0($t1)
+        j FOURTH_PIXEL_PLAYER
+        THIRD_PIXEL_PLAYER_ELSE:
+        sw $a0, 260($t1)
+
+    THIRD_PIXEL_TAIL:
+        bne $s1, $zero, FOURTH_PIXEL_PLAYER
+        li $t4, 2
+        bge $t2, $t4, THIRD_PIXEL_TAIL_ELSE
+        sw $a1, 0($t3)
+        j FOURTH_PIXEL_PLAYER
+        THIRD_PIXEL_TAIL_ELSE:
+        sw $a1, 260($t3)
+
+    FOURTH_PIXEL_PLAYER:
+        li $t4, 3
+        blt $t0, $zero, FOURTH_PIXEL_PLAYER_ELSE
+        beq $t0, $t4, FOURTH_PIXEL_PLAYER_ELSE
+        sw $a0, 256($t1)
+        j FOURTH_PIXEL_TAIL
+        FOURTH_PIXEL_PLAYER_ELSE:
+        sw $a0, 4($t1)
+
+    FOURTH_PIXEL_TAIL:
+        bne $s1, $zero, FINISHED_TAIL_PLAYER_PRINTING
+        li $t4, 3
+        blt $t2, $zero, FOURTH_PIXEL_TAIL_ELSE
+        beq $t2, $t4, FOURTH_PIXEL_TAIL_ELSE
+        sw $a1, 256($t3)
+        j FINISHED_TAIL_PLAYER_PRINTING
+        FOURTH_PIXEL_TAIL_ELSE:
+        sw $a1, 4($t3)
+
+    FINISHED_TAIL_PLAYER_PRINTING:
     jr $ra
