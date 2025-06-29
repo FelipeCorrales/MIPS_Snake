@@ -65,20 +65,20 @@ MAIN:
 
     START_GAME:
     # jal DRAW_BACKGROUND
+    jal GENERATE_APPLE
 
     GAME_LOOP:
-        li $s1, 0
         jal GET_INPUT
 
         jal MOVE_PLAYER
         jal CHECK_BOUNDARIES
         # jal CHECK_COLLISION
-        # jal CHECK_APPLE (Apple eaten $s1)
+        jal CHECK_APPLE (Apple eaten $s1)
 
         beq $s1, $zero, NO_APPLE
         APPLE:
         jal DRAW_BOARD_UPDATE
-        # jal GENERATE_APPLE (Only if $s1 != 0, should also draw the apple)
+        jal GENERATE_APPLE
         j NEXT_ITERATION
 
         NO_APPLE:
@@ -99,6 +99,75 @@ MAIN:
         jal STALL
         addi $t0, $t0, 1
         j STALL_GAME_OVER
+
+CHECK_APPLE:
+    li $s1, 1
+    li $s1, 0
+    jr $ra
+
+GENERATE_APPLE:
+    jr $ra
+
+CHECK_COLLISION:
+    lw $t1, player              # Load player
+    andi $t0, $t1, 0xFF000000   # Save X position
+    srl $t0, $t0, 24            # Apply correct format
+    andi $t1, $t1, 0x00F00000   # Save Y position
+    srl $t1, $t1, 20            # Apply correct format
+
+    # Get current tile address
+    li $t2, 8
+    mult $t2, $t1
+    mflo $t2
+    sll $t2, $t2, 2
+    add $t2, $t2, $t8
+
+    li $t3, 4
+    move $t4, $t0
+    ADDRESS_ITERATOR_COLLISION:
+    blt $t4, $t3, LOAD_CORRECT_ADDRESS_COLLISION
+    addi $t2, $t2, 4
+    subi $t4, $t4, 4
+    j ADDRESS_ITERATOR_COLLISION
+
+    LOAD_CORRECT_ADDRESS_COLLISION:
+    lw $t3, 0($t2)
+
+    beq $t4, $zero, FOURTH_BIT_COLLISION
+    li $t5, 1
+    beq $t4, $t5, THIRD_BIT_COLLISION
+    li $t5, 2
+    beq $t4, $t5, SECOND_BIT_COLLISION
+
+    FIRST_BIT_COLLISION:
+        andi $t3, $t3, 0x0004       # Get value for active
+        j GOT_COLLISION_TILE
+
+    SECOND_BIT_COLLISION:
+        andi $t3, $t3, 0x0040       # Get value for active
+        j GOT_COLLISION_TILE
+
+    THIRD_BIT_COLLISION:
+        andi $t3, $t3, 0x0400       # Get value for active
+        j GOT_COLLISION_TILE
+
+    FOURTH_BIT_COLLISION:
+        andi $t3, $t3, 0x4000       # Get value for active
+
+    GOT_COLLISION_TILE:
+    move $t1, $ra
+    bne $t3, $zero, KILL_PLAYER
+    jr $t1
+
+DRAW_GAME_OVER:
+    la $a0, oversplash0
+    la $a1, t0
+    jal SHOW_SPLASH
+
+    la $a0, oversplash1
+    la $a1, t1
+    jal SHOW_SPLASH
+    jr $ra
 
 INITIALIZE_GAME_FIELD:
     li $t0, 0
@@ -138,7 +207,7 @@ INITIALIZE_GAME_FIELD:
 
 RESTART:
     li $s0, 0
-    li $t0, 0x03702731
+    li $t0, 0x06704731
     sw $t0, player
     # jal DRAW_BACKGROUND
     # jal DRAW_TITLE_SCREEN
@@ -249,7 +318,7 @@ MOVE_PLAYER:
     srl $t2, $t2, 20            # Apply correct format
     andi $t3, $t3, 0x000FFFFF   # Save player without X and Y values
 
-    # Get tail direction
+    # Get current tile address
     li $t4, 8
     mult $t4, $t2
     mflo $t4
