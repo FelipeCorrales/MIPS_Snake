@@ -579,10 +579,10 @@ STALL:
 GET_INPUT:
     lw $t0, 0xFFFF0004
     li $t1, 32  # Space
-    li $t2, 44  # Comma
+    li $t2, 119 # W
     li $t3, 97  # A
-    li $t4, 111 # 0
-    li $t5, 101 # E
+    li $t4, 115 # S
+    li $t5, 100 # D
     li $t6, 27  # Escape
 
     lw $t7, player # Load player
