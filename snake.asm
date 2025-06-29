@@ -54,24 +54,24 @@
     la $t8, field
 MAIN:
     jal INITIALIZE_GAME_FIELD
-    # jal INITIAL_DRAW
+    jal INITIAL_DRAW
 
     li $s0, 0
     START_LOOP:
     bgt $s0, $zero, START_GAME
     jal GET_INPUT
-    jal STALL       # This stall avoids lag
+    jal STALL
     j START_LOOP
 
     START_GAME:
-    # jal DRAW_BACKGROUND
+    jal DRAW_BACKGROUND
     jal GENERATE_APPLE
 
     GAME_LOOP:
         jal GET_INPUT
 
         jal MOVE_PLAYER
-        # jal CHECK_BOUNDARIES
+        jal CHECK_BOUNDARIES
         jal CHECK_COLLISION
         jal CHECK_APPLE
 
@@ -91,7 +91,7 @@ MAIN:
         j GAME_LOOP_CONDITIONAL
 
     GAME_OVER:
-        # jal DRAW_GAME_OVER
+        jal DRAW_GAME_OVER
         li $t0, 0
         li $t1, 30
         STALL_GAME_OVER:
@@ -103,13 +103,13 @@ MAIN:
 GENERATE_APPLE:
     move $a2, $ra
 
-    li $a0, 0
+    li $a0, 1
     li $a1, 14
     li $v0, 42
     syscall
     move $t0, $a0
 
-    li $a0, 0
+    li $a0, 1
     li $a1, 30
     li $v0, 42
     syscall
@@ -125,7 +125,15 @@ GENERATE_APPLE:
     beq $s0, $zero, GENERATE_APPLE
 
     DRAW_APPLE:
-
+    sll $a0, $a0, 3
+    sll $a1, $a1, 9
+    add $t0, $a0, $a1
+    add $t0, $t0, $t9
+    lw $t1, apl
+    sw $t1, 0($t0)
+    sw $t1, 4($t0)
+    sw $t1, 256($t0)
+    sw $t1, 260($t0)
     jr $ra
 
 PLACE_APPLE:
@@ -179,7 +187,7 @@ PLACE_APPLE:
     GOT_APPLE_PLACE_TILE:
     bne $t2, $zero, NOT_AVAILABLE
     li $s0, 1
-    and $t1, $t1, $t3
+    add $t1, $t1, $t3
     sw $t1, 0($t0)
     jr $ra
 
@@ -562,9 +570,10 @@ KILL_PLAYER:
     jr $ra
 
 STALL:
-    # Sleep for 50ms
+    # Sleep for 100ms
+    li $a0, 100
     li $v0, 32
-    li $a0, 50
+    syscall
     jr $ra
 
 GET_INPUT:
@@ -936,7 +945,7 @@ DRAW_BOARD_UPDATE:
     CHOOSE_PLAYER_COLOR:
         add $a0, $t1, $t2
         andi $a0, $a0, 0x1
-        beq $a0, $zero, PLAYER_COLOR_1
+        bne $a0, $zero, PLAYER_COLOR_1
         PLAYER_COLOR_0:
         lw $a0, sn0
         j CHOOSE_BACKGROUND_COLOR
@@ -946,7 +955,7 @@ DRAW_BOARD_UPDATE:
     CHOOSE_BACKGROUND_COLOR:
         add $a1, $t3, $t4
         andi $a1, $a1, 0x1
-        beq $a1, $zero, BACKGROUND_COLOR_1
+        bne $a1, $zero, BACKGROUND_COLOR_1
         BACKGROUND_COLOR_0:
         lw $a1, bg0
         j GET_ADDRESSES
