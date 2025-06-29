@@ -15,14 +15,14 @@
     # Screen width =    64px
     # Size of screen: height*width*4 = 8192
     window: .space 8192
-    # Game field height =   14px
-    # Game field width =    30px
-    # Game field size: height*width*4 = 1680
+    # Game field height =   14px // The 16 pixels wide is just for convenience
+    # Game field width =    32px
+    # Game field size: height*width*4 + 6 bytes of convenience = 1816
     # Bit 1:        Apple (0=False, 1=True)
     # Bit 2:        Active/Occupied by snake body (0=False, 1=True)
     # Bit 3 & 4:    Direction (Used to move the tail)
-    # Total = 210 WORDS
-    field: .space 1680
+    # Total = 113 WORDS
+    field: .space 1816
 
     # Byte 1 & 2:   Player X position
     # Byte 3:       Player Y position
@@ -30,7 +30,7 @@
     # Byte 6:       Tail Y position
     # Byte 7:       Player moving direction
     # Byte 8:       Is player alive
-    player: .word 0x03702731
+    player: .word 0x06704731
 
     # Colors
     t0: .word 0xFFFFFF  # White
@@ -53,6 +53,7 @@
     la $t9, window
     la $t8, field
 MAIN:
+    jal INITIALIZE_GAME_FIELD
     # jal INITIAL_DRAW
 
     li $s0, 0
@@ -72,16 +73,20 @@ MAIN:
         jal MOVE_PLAYER
         jal CHECK_BOUNDARIES
         # jal CHECK_COLLISION
-
         # jal CHECK_APPLE (Apple eaten $s1)
-        bne $s1, $zero, NO_APPLE
+
+        beq $s1, $zero, NO_APPLE
+        APPLE:
+        jal DRAW_BOARD_UPDATE
         # jal GENERATE_APPLE (Only if $s1 != 0, should also draw the apple)
+        j NEXT_ITERATION
 
         NO_APPLE:
         jal DRAW_BOARD_UPDATE
+        jal MOVE_TAIL
+        j NEXT_ITERATION
 
-        # jal MOVE_TAIL
-
+        NEXT_ITERATION:
         jal STALL
         j GAME_LOOP_CONDITIONAL
 
@@ -95,19 +100,144 @@ MAIN:
         addi $t0, $t0, 1
         j STALL_GAME_OVER
 
-    RESTART:
-        li $s0, 0
-        li $t0, 0x03702731
-        sw $t0, player
-        # jal DRAW_BACKGROUND
-        # jal DRAW_TITLE_SCREEN
-        j START_LOOP
+INITIALIZE_GAME_FIELD:
+    li $t0, 0
+    li $t1, 113
+    la $t2, field
+    li $t4, 57
+    li $t5, 60
+    li $t6, 0x3370
+    li $t7, 0x0080
+
+    GAME_FIELD_ITERATOR:
+    beq $t0, $t1, FIELD_FINISHED
+
+    sll $t3, $t0, 2
+
+    add $t2, $t2, $t3
+
+    beq $t0, $t4, GAME_FIELD_ADD_PLAYER
+    beq $t0, $t5, GAME_FIELD_ADD_APPLE
+    sw $zero, 0($t2)
+
+    GAME_FIELD_NEXT_ITERATION:
+    sub $t2, $t2, $t3
+    addi $t0, $t0, 1
+    j GAME_FIELD_ITERATOR
+
+    GAME_FIELD_ADD_PLAYER:
+    sw $t6, 0($t2)
+    j GAME_FIELD_NEXT_ITERATION
+
+    GAME_FIELD_ADD_APPLE:
+    sw $t7, 0($t2)
+    j GAME_FIELD_NEXT_ITERATION
+
+    FIELD_FINISHED:
+    jr $ra
+
+RESTART:
+    li $s0, 0
+    li $t0, 0x03702731
+    sw $t0, player
+    # jal DRAW_BACKGROUND
+    # jal DRAW_TITLE_SCREEN
+    jal INITIALIZE_GAME_FIELD
+    j START_LOOP
 
 GAME_LOOP_CONDITIONAL:
     lw $t1, player
     andi $t0, $t1, 0x00000001
     beq $t0, $zero, GAME_OVER
     j GAME_LOOP
+
+MOVE_TAIL:
+    lw $t2, player              # Load player
+    andi $t0, $t2, 0x000FF000   # Save X position
+    srl $t0, $t0, 12            # Apply correct format
+    andi $t1, $t2, 0x00000F00   # Save Y position
+    srl $t1, $t1, 8             # Apply correct format
+    andi $t2, $t2, 0xFFF000FF   # Player without tail position
+
+    # Get tail direction
+    li $t3, 8
+    mult $t3, $t1
+    mflo $t3
+    sll $t3, $t3, 2
+    add $t3, $t3, $t8
+
+    li $t4, 4
+    move $t5, $t0
+    ADDRESS_ITERATOR_MOVE:
+    blt $t5, $t4, LOAD_CORRECT_ADDRESS_MOVE
+    addi $t3, $t3, 4
+    subi $t5, $t5, 4
+    j ADDRESS_ITERATOR_MOVE
+
+    LOAD_CORRECT_ADDRESS_MOVE:
+    lw $t4, 0($t3)
+
+    beq $t5, $zero, FOURTH_BIT_MOVE
+    li $t6, 1
+    beq $t5, $t6, THIRD_BIT_MOVE
+    li $t6, 2
+    beq $t5, $t6, SECOND_BIT_MOVE
+
+    FIRST_BIT_MOVE:
+        andi $t6, $t4, 0xFFF0       # Get value without current byte
+        j GOT_CORRECT_VALUES_MOVE
+
+    SECOND_BIT_MOVE:
+        andi $t6, $t4, 0xFF0F       # Get value without current byte
+        srl $t4, $t4, 4
+        j GOT_CORRECT_VALUES_MOVE
+
+    THIRD_BIT_MOVE:
+        andi $t6, $t4, 0xF0FF       # Get value without current byte
+        srl $t4, $t4, 8
+        j GOT_CORRECT_VALUES_MOVE
+
+    FOURTH_BIT_MOVE:
+        andi $t6, $t4, 0x0FFF       # Get value without current byte
+        srl $t4, $t4, 12
+
+    GOT_CORRECT_VALUES_MOVE:
+    sw $t6, 0($t3)              # Save new value
+    andi $t3, $t4, 0x0003
+
+    li $t4, 1
+    li $t5, 2
+
+    beq $t3, $zero, MOVE_TAIL_UP
+    beq $t3, $t4, MOVE_TAIL_LEFT
+    beq $t3, $t5, MOVE_TAIL_DOWN
+    bgt $t3, $t5, MOVE_TAIL_RIGHT
+    j MOVE_TAIL_SAVE
+
+    MOVE_TAIL_UP:
+        subi $t1, $t1, 1
+        j MOVE_TAIL_SAVE
+
+    MOVE_TAIL_LEFT:
+        subi $t0, $t0, 1
+        j MOVE_TAIL_SAVE
+
+    MOVE_TAIL_DOWN:
+        addi $t1, $t1, 1
+        j MOVE_TAIL_SAVE
+
+    MOVE_TAIL_RIGHT:
+        addi $t0, $t0, 1
+        j MOVE_TAIL_SAVE
+
+    MOVE_TAIL_SAVE:
+    sll $t0, $t0, 12    # Apply correct format
+    sll $t1, $t1, 8     # Apply correct format
+    add $t2, $t2, $t0   # Add to buffer
+    add $t2, $t2, $t1   # Add to buffer
+    sw $t2, player      # Save buffer to memory
+
+    jr $ra
 
 MOVE_PLAYER:
     lw $t3, player              # Load player
@@ -119,46 +249,90 @@ MOVE_PLAYER:
     srl $t2, $t2, 20            # Apply correct format
     andi $t3, $t3, 0x000FFFFF   # Save player without X and Y values
 
-    # Update player field
-    li $t4, 30
-    mult $t4, $t1
+    # Get tail direction
+    li $t4, 8
+    mult $t4, $t2
     mflo $t4
     sll $t4, $t4, 2
-    sll $t5, $t2, 2
-    add $t5, $t5, $t8
-    lw $t6, 0($t5)
-    andi $t6, 0x0FFFFFFF
-    addi $t4, $t0, 4
-    sll $t4, $t4, 28
-    add $t4, $t4, $t6
-    sw $t4, 0($t5)
+    add $t4, $t4, $t8
 
+    li $t5, 4
+    move $t6, $t1
+    ADDRESS_ITERATOR_PLAYER:
+    blt $t6, $t5, LOAD_CORRECT_ADDRESS_PLAYER
+    addi $t4, $t4, 4
+    subi $t6, $t6, 4
+    j ADDRESS_ITERATOR_PLAYER
+
+    LOAD_CORRECT_ADDRESS_PLAYER:
+    lw $t5, 0($t4)
+
+    beq $t6, $zero, FOURTH_BIT_PLAYER
+    li $t7, 1
+    beq $t6, $t7, THIRD_BIT_PLAYER
+    li $t7, 2
+    beq $t6, $t7, SECOND_BIT_PLAYER
+
+    FIRST_BIT_PLAYER:
+        andi $t7, $t5, 0xFFF0       # Get value without current byte
+        add $t6, $t0, 4
+        add $t7, $t7, $t6
+        sw $t7, 0($t4)              # Save new value
+        j PLAYER_SAVED
+
+    SECOND_BIT_PLAYER:
+        andi $t7, $t5, 0xFF0F       # Get value without current byte
+        add $t6, $t0, 4
+        sll $t6, $t6, 4
+        add $t7, $t7, $t6
+        sw $t7, 0($t4)              # Save new value
+        srl $t5, $t5, 4
+        j PLAYER_SAVED
+
+    THIRD_BIT_PLAYER:
+        andi $t7, $t5, 0xF0FF       # Get value without current byte
+        add $t6, $t0, 4
+        sll $t6, $t6, 8
+        add $t7, $t7, $t6
+        sw $t7, 0($t4)              # Save new value
+        srl $t5, $t5, 8
+        j PLAYER_SAVED
+
+    FOURTH_BIT_PLAYER:
+        andi $t7, $t5, 0x0FFF       # Get value without current byte
+        add $t6, $t0, 4
+        sll $t6, $t6, 12
+        add $t7, $t7, $t6
+        sw $t7, 0($t4)              # Save new value
+        srl $t5, $t5, 12
+
+    PLAYER_SAVED:
     li $t4, 1
     li $t5, 2
 
-    beq $t0, $zero, MOVE_UP
-    beq $t0, $t4, MOVE_LEFT
-    beq $t0, $t5, MOVE_DOWN
-    bgt $t0, $t5, MOVE_RIGHT
-    j MOVE_SAVE_PLAYER
+    beq $t0, $zero, MOVE_PLAYER_UP
+    beq $t0, $t4, MOVE_PLAYER_LEFT
+    beq $t0, $t5, MOVE_PLAYER_DOWN
+    bgt $t0, $t5, MOVE_PLAYER_RIGHT
+    j MOVE_PLAYER_SAVE
 
-    MOVE_UP:
-    subi $t2, $t2, 1
-    j MOVE_SAVE_PLAYER
+    MOVE_PLAYER_UP:
+        subi $t2, $t2, 1
+        j MOVE_PLAYER_SAVE
 
-    MOVE_LEFT:
-    subi $t1, $t1, 1
-    j MOVE_SAVE_PLAYER
+    MOVE_PLAYER_LEFT:
+        subi $t1, $t1, 1
+        j MOVE_PLAYER_SAVE
 
-    MOVE_DOWN:
-    addi $t2, $t2, 1
-    j MOVE_SAVE_PLAYER
+    MOVE_PLAYER_DOWN:
+        addi $t2, $t2, 1
+        j MOVE_PLAYER_SAVE
 
-    MOVE_RIGHT:
-    addi $t1, $t1, 1
-    j MOVE_SAVE_PLAYER
+    MOVE_PLAYER_RIGHT:
+        addi $t1, $t1, 1
+        j MOVE_PLAYER_SAVE
 
-    MOVE_SAVE_PLAYER:
+    MOVE_PLAYER_SAVE:
     sll $t1, $t1, 24    # Apply correct format
     sll $t2, $t2, 20    # Apply correct format
     add $t3, $t3, $t1   # Add to buffer
@@ -535,16 +709,33 @@ DRAW_BOARD_UPDATE:
     srl $t4, $t4, 8             # Apply correct format
 
     # Get tail direction
-    li $t5, 30
+    li $t5, 8 # 8 is the amount of words per row
     mult $t5, $t4
     mflo $t5
-    sll $t6, $t3, 2
+
     sll $t5, $t5, 2
-    add $t5, $t5, $t6
+
     add $t5, $t5, $t8
-    lw $t5, 0($t5)
-    andi $t5, 0x30000000
-    srl $t5, $t5, 28            # Apply correct format
+    li $t6, 4
+    move $t7, $t3
+    ADDRESS_ITERATOR_BOARD:
+        blt $t7, $t6, LOAD_CORRECT_ADDRESS_BOARD
+        addi $t5, $t5, 4
+        subi $t7, $t7, 4
+        j ADDRESS_ITERATOR_BOARD
+
+    LOAD_CORRECT_ADDRESS_BOARD:
+        lw $t5, 0($t5)
+
+    SHIFT_CORRECT_ADDRESS_BOARD:
+        beq $t7, $zero, FORMAT_ADDRESS_BOARD
+        sll $t5, $t5, 4
+        subi $t7, $t7, 1
+        j SHIFT_CORRECT_ADDRESS_BOARD
+
+    FORMAT_ADDRESS_BOARD:
+        andi $t5, $t5, 0x3000
+        srl $t5, $t5, 12
 
     CHOOSE_PLAYER_COLOR:
         add $a0, $t1, $t2
@@ -625,7 +816,11 @@ DRAW_BOARD_UPDATE:
         sw $a1, 256($t3)
 
     MID_PRINT_STALL:
+        move $a2, $a0
+        move $t4, $ra
         jal STALL
+        move $ra, $t4
+        move $a0, $a2
 
     THIRD_PIXEL_PLAYER:
         li $t4, 2
