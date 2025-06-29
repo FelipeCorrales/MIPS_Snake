@@ -71,9 +71,9 @@ MAIN:
         jal GET_INPUT
 
         jal MOVE_PLAYER
-        jal CHECK_BOUNDARIES
-        # jal CHECK_COLLISION
-        jal CHECK_APPLE (Apple eaten $s1)
+        # jal CHECK_BOUNDARIES
+        jal CHECK_COLLISION
+        jal CHECK_APPLE
 
         beq $s1, $zero, NO_APPLE
         APPLE:
@@ -100,12 +100,146 @@ MAIN:
         addi $t0, $t0, 1
         j STALL_GAME_OVER
 
+GENERATE_APPLE:
+    move $a2, $ra
+
+    li $a0, 0
+    li $a1, 14
+    li $v0, 42
+    syscall
+    move $t0, $a0
+
+    li $a0, 0
+    li $a1, 30
+    li $v0, 42
+    syscall
+
+    move $a1, $t0
+
+    # $a0: Apple X position
+    # $a1: Apple Y position
+    jal PLACE_APPLE
+    # This returns $s0 = 0 if couldn't place apple
+
+    move $ra, $a2
+    beq $s0, $zero, GENERATE_APPLE
+
+    DRAW_APPLE:
+
+    jr $ra
+
+PLACE_APPLE:
+    # Get current tile address
+    li $t0, 8
+    mult $t0, $a1
+    mflo $t0
+    sll $t0, $t0, 2
+    add $t0, $t0, $t8
+
+    li $t1, 4
+    move $t2, $a0
+    ADDRESS_ITERATOR_APPLE_PLACE:
+    blt $t2, $t1, LOAD_CORRECT_ADDRESS_APPLE_PLACE
+    addi $t0, $t0, 4
+    subi $t2, $t2, 4
+    j ADDRESS_ITERATOR_APPLE_PLACE
+
+    LOAD_CORRECT_ADDRESS_APPLE_PLACE:
+    lw $t1, 0($t0)
+
+    beq $t2, $zero, FOURTH_BIT_APPLE_PLACE
+    li $t3, 1
+    beq $t2, $t3, THIRD_BIT_APPLE_PLACE
+    li $t3, 2
+    beq $t2, $t3, SECOND_BIT_APPLE_PLACE
+
+    FIRST_BIT_APPLE_PLACE:
+        andi $t2, $t1, 0x000C       # Get value for active/apple
+        andi $t1, $t1, 0xFFF0       # Get byte without values
+        li $t3, 0x0008
+        j GOT_APPLE_PLACE_TILE
+
+    SECOND_BIT_APPLE_PLACE:
+        andi $t2, $t1, 0x00C0       # Get value for active/apple
+        andi $t1, $t1, 0xFF0F       # Get byte without values
+        li $t3, 0x0080
+        j GOT_APPLE_PLACE_TILE
+
+    THIRD_BIT_APPLE_PLACE:
+        andi $t2, $t1, 0x0C00       # Get value for active/apple
+        andi $t1, $t1, 0xF0FF       # Get byte without values
+        li $t3, 0x0800
+        j GOT_APPLE_PLACE_TILE
+
+    FOURTH_BIT_APPLE_PLACE:
+        andi $t2, $t1, 0xC000       # Get value for active/apple
+        andi $t1, $t1, 0x0FFF       # Get byte without values
+        li $t3, 0x8000
+
+    GOT_APPLE_PLACE_TILE:
+    bne $t2, $zero, NOT_AVAILABLE
+    li $s0, 1
+    and $t1, $t1, $t3
+    sw $t1, 0($t0)
+    jr $ra
+
+    NOT_AVAILABLE:
+    li $s0, 0
+    jr $ra
+
 CHECK_APPLE:
-    li $s1, 1
+    lw $t1, player              # Load player
+    andi $t0, $t1, 0xFF000000   # Save X position
+    srl $t0, $t0, 24            # Apply correct format
+    andi $t1, $t1, 0x00F00000   # Save Y position
+    srl $t1, $t1, 20            # Apply correct format
+
+    # Get current tile address
+    li $t2, 8
+    mult $t2, $t1
+    mflo $t2
+    sll $t2, $t2, 2
+    add $t2, $t2, $t8
+
+    li $t3, 4
+    move $t4, $t0
+    ADDRESS_ITERATOR_APPLE_CHECK:
+    blt $t4, $t3, LOAD_CORRECT_ADDRESS_APPLE_CHECK
+    addi $t2, $t2, 4
+    subi $t4, $t4, 4
+    j ADDRESS_ITERATOR_APPLE_CHECK
+
+    LOAD_CORRECT_ADDRESS_APPLE_CHECK:
+    lw $t3, 0($t2)
+
+    beq $t4, $zero, FOURTH_BIT_APPLE_CHECK
+    li $t5, 1
+    beq $t4, $t5, THIRD_BIT_APPLE_CHECK
+    li $t5, 2
+    beq $t4, $t5, SECOND_BIT_APPLE_CHECK
+
+    FIRST_BIT_APPLE_CHECK:
+        andi $t3, $t3, 0x0008       # Get value for active
+        j GOT_APPLE_CHECK_TILE
+
+    SECOND_BIT_APPLE_CHECK:
+        andi $t3, $t3, 0x0080       # Get value for active
+        j GOT_APPLE_CHECK_TILE
+
+    THIRD_BIT_APPLE_CHECK:
+        andi $t3, $t3, 0x0800       # Get value for active
+        j GOT_APPLE_CHECK_TILE
+
+    FOURTH_BIT_APPLE_CHECK:
+        andi $t3, $t3, 0x8000       # Get value for active
+
+    GOT_APPLE_CHECK_TILE:
+    bne $t3, $zero, GOT_APPLE
     li $s1, 0
     jr $ra
 
-GENERATE_APPLE:
+    GOT_APPLE:
+    li $s1, 1
     jr $ra
 
 CHECK_COLLISION:
@@ -174,9 +308,7 @@ INITIALIZE_GAME_FIELD:
     li $t1, 113
     la $t2, field
     li $t4, 57
-    li $t5, 60
-    li $t6, 0x3370
-    li $t7, 0x0080
+    li $t5, 0x3370
 
     GAME_FIELD_ITERATOR:
     beq $t0, $t1, FIELD_FINISHED
@@ -186,7 +318,6 @@ INITIALIZE_GAME_FIELD:
     add $t2, $t2, $t3
 
     beq $t0, $t4, GAME_FIELD_ADD_PLAYER
-    beq $t0, $t5, GAME_FIELD_ADD_APPLE
     sw $zero, 0($t2)
 
     GAME_FIELD_NEXT_ITERATION:
@@ -195,11 +326,7 @@ INITIALIZE_GAME_FIELD:
     j GAME_FIELD_ITERATOR
 
     GAME_FIELD_ADD_PLAYER:
-    sw $t6, 0($t2)
-    j GAME_FIELD_NEXT_ITERATION
-
-    GAME_FIELD_ADD_APPLE:
-    sw $t7, 0($t2)
+    sw $t5, 0($t2)
     j GAME_FIELD_NEXT_ITERATION
 
     FIELD_FINISHED:
